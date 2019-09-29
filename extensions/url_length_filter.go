@@ -1,7 +1,7 @@
 package extensions
 
 import (
-	"github.com/gocolly/colly"
+	"github.com/zplzpl/fastcolly"
 )
 
 // URLLengthFilter filters out requests with URLs longer than URLLengthLimit

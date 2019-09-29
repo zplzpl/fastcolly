@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/gocolly/colly"
+	"github.com/zplzpl/fastcolly"
 )
 
 func main() {

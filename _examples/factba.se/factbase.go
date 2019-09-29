@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 	"strconv"
 
-	"github.com/gocolly/colly"
+	"github.com/zplzpl/fastcolly"
 )
 
 var baseSearchURL = "https://factba.se/json/json-transcript.php?q=&f=&dt=&p="
