@@ -5,6 +5,8 @@ Will be changed on Colly:
 * simplify colly (rm something)
 * add fasthttp as httpbackend
 
+Some designs I don't need, so I will remove them, I will also list them.
+
 # Base in Colly v1.2.0
 
 Lightning Fast and Elegant Scraping Framework for Gophers
