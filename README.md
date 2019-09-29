@@ -15,7 +15,7 @@ Colly provides a clean interface to write any kind of crawler/scraper/spider.
 
 With Colly you can easily extract structured data from websites, which can be used for a wide range of applications, like data mining, data processing or archiving.
 
-[GOCOLLY](https://github.com/gocolly/colly)
+[GOCOLLY](https://github.com/gocolly/colly) <- Thanks 
 
 ## Features
 
