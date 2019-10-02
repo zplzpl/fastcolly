@@ -7,6 +7,11 @@ Will be changed on Colly:
 
 Some designs I don't need, so I will remove them, I will also list them.
 
+* fasthttp API is incompatible with net/http
+* fasthttp doesn't support HTTP/2.0 and WebSockets
+* remove Appengine client
+* scrape func requestData rename as requestBody type is []byte
+
 # Base in Colly v1.2.0
 
 Lightning Fast and Elegant Scraping Framework for Gophers

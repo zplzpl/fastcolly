@@ -18,25 +18,21 @@ import (
 	"crypto/sha1"
 	"encoding/gob"
 	"encoding/hex"
-	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
 	"path"
 	"regexp"
-	"strings"
 	"sync"
 	"time"
 
-	"compress/gzip"
-
 	"github.com/gobwas/glob"
+	"github.com/valyala/fasthttp"
 )
 
 type httpBackend struct {
 	LimitRules []*LimitRule
-	Client     *http.Client
+	Client     *fasthttp.Client
 	lock       *sync.RWMutex
 }
 
@@ -94,10 +90,13 @@ func (r *LimitRule) Init() error {
 
 func (h *httpBackend) Init(jar http.CookieJar) {
 	rand.Seed(time.Now().UnixNano())
-	h.Client = &http.Client{
-		Jar:     jar,
-		Timeout: 10 * time.Second,
-	}
+	h.Client = &fasthttp.Client{}
+
+	//h.Client = &http.Client{
+	//	Jar:     jar,
+	//	Timeout: 10 * time.Second,
+	//}
+
 	h.lock = &sync.RWMutex{}
 }
 
@@ -127,7 +126,7 @@ func (h *httpBackend) GetMatchingRule(domain string) *LimitRule {
 	return nil
 }
 
-func (h *httpBackend) Cache(request *http.Request, bodySize int, cacheDir string) (*Response, error) {
+func (h *httpBackend) Cache(request *Request, bodySize int, cacheDir string) (*Response, error) {
 	if cacheDir == "" || request.Method != "GET" {
 		return h.Do(request, bodySize)
 	}
@@ -164,8 +163,10 @@ func (h *httpBackend) Cache(request *http.Request, bodySize int, cacheDir string
 	return resp, os.Rename(filename+"~", filename)
 }
 
-func (h *httpBackend) Do(request *http.Request, bodySize int) (*Response, error) {
+func (h *httpBackend) Do(request *Request, bodySize int) (*Response, error) {
+
 	r := h.GetMatchingRule(request.URL.Host)
+
 	if r != nil {
 		r.waitChan <- true
 		defer func(r *LimitRule) {
@@ -178,35 +179,38 @@ func (h *httpBackend) Do(request *http.Request, bodySize int) (*Response, error)
 		}(r)
 	}
 
-	res, err := h.Client.Do(request)
-	if err != nil {
-		return nil, err
+	req,res := fasthttp.AcquireRequest(),fasthttp.AcquireResponse()
+	defer func() {
+		fasthttp.ReleaseRequest(req)
+		fasthttp.ReleaseResponse(res)
+	}()
+
+	req.SetRequestURI(request.URL.String())
+	req.Header.SetMethod(request.Method)
+	hdr := *request.Headers
+	for k,vs := range hdr {
+		for _,v := range vs {
+			req.Header.Add(k,v)
+		}
 	}
-	defer res.Body.Close()
-	if res.Request != nil {
-		*request = *res.Request
+	req.SetBody(request.Body)
+	req.SetHost(request.URL.Host)
+
+	if err := h.Client.Do(req,res);err!=nil {
+		return nil,err
 	}
 
-	var bodyReader io.Reader = res.Body
-	if bodySize > 0 {
-		bodyReader = io.LimitReader(bodyReader, int64(bodySize))
-	}
-	contentEncoding := strings.ToLower(res.Header.Get("Content-Encoding"))
-	if !res.Uncompressed && (strings.Contains(contentEncoding, "gzip") || (contentEncoding == "" && strings.Contains(strings.ToLower((res.Header.Get("Content-Type"))), "gzip"))) {
-		bodyReader, err = gzip.NewReader(bodyReader)
-		if err != nil {
-			return nil, err
-		}
-		defer bodyReader.(*gzip.Reader).Close()
-	}
-	body, err := ioutil.ReadAll(bodyReader)
-	if err != nil {
-		return nil, err
-	}
+	rhdr := make(http.Header)
+	res.Header.VisitAll(func(k, v []byte) {
+		sk := string(k)
+		sv := string(v)
+		rhdr.Set(sk, sv)
+	})
+
 	return &Response{
-		StatusCode: res.StatusCode,
-		Body:       body,
-		Headers:    &res.Header,
+		StatusCode: res.StatusCode(),
+		Body:       res.Body(),
+		Headers:    &rhdr,
 	}, nil
 }
 

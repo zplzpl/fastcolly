@@ -15,10 +15,7 @@
 package colly
 
 import (
-	"bytes"
 	"encoding/json"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
@@ -38,7 +35,7 @@ type Request struct {
 	// Method is the HTTP method of the request
 	Method string
 	// Body is the request body which is used on POST/PUT requests
-	Body io.Reader
+	Body []byte
 	// ResponseCharacterencoding is the character encoding of the response body.
 	// Leave it blank to allow automatic character encoding of the response body.
 	// It is empty by default and it can be set in OnRequest callback.
@@ -62,7 +59,7 @@ type serializableRequest struct {
 }
 
 // New creates a new request with the context of the original request
-func (r *Request) New(method, URL string, body io.Reader) (*Request, error) {
+func (r *Request) New(method, URL string, body []byte) (*Request, error) {
 	u, err := url.Parse(URL)
 	if err != nil {
 		return nil, err
@@ -117,26 +114,26 @@ func (r *Request) Visit(URL string) error {
 // Post continues a collector job by creating a POST request and preserves the Context
 // of the previous request.
 // Post also calls the previously provided callbacks
-func (r *Request) Post(URL string, requestData map[string]string) error {
-	return r.collector.scrape(r.AbsoluteURL(URL), "POST", r.Depth+1, createFormReader(requestData), r.Ctx, nil, true)
+func (r *Request) Post(URL string, requestData []byte) error {
+	return r.collector.scrape(r.AbsoluteURL(URL), "POST", r.Depth+1, requestData, r.Ctx, nil, true)
 }
 
 // PostRaw starts a collector job by creating a POST request with raw binary data.
 // PostRaw preserves the Context of the previous request
 // and calls the previously provided callbacks
 func (r *Request) PostRaw(URL string, requestData []byte) error {
-	return r.collector.scrape(r.AbsoluteURL(URL), "POST", r.Depth+1, bytes.NewReader(requestData), r.Ctx, nil, true)
+	return r.collector.scrape(r.AbsoluteURL(URL), "POST", r.Depth+1, requestData, r.Ctx, nil, true)
 }
 
 // PostMultipart starts a collector job by creating a Multipart POST request
 // with raw binary data.  PostMultipart also calls the previously provided.
 // callbacks
-func (r *Request) PostMultipart(URL string, requestData map[string][]byte) error {
+func (r *Request) PostMultipart(URL string, requestData []byte) error {
 	boundary := randomBoundary()
 	hdr := http.Header{}
 	hdr.Set("Content-Type", "multipart/form-data; boundary="+boundary)
 	hdr.Set("User-Agent", r.collector.UserAgent)
-	return r.collector.scrape(r.AbsoluteURL(URL), "POST", r.Depth+1, createMultipartReader(boundary, requestData), r.Ctx, hdr, true)
+	return r.collector.scrape(r.AbsoluteURL(URL), "POST", r.Depth+1, requestData, r.Ctx, hdr, true)
 }
 
 // Retry submits HTTP request again with the same parameters
@@ -158,18 +155,18 @@ func (r *Request) Marshal() ([]byte, error) {
 			return nil
 		})
 	}
-	var err error
-	var body []byte
-	if r.Body != nil {
-		body, err = ioutil.ReadAll(r.Body)
-		if err != nil {
-			return nil, err
-		}
-	}
+	//var err error
+	//var body []byte
+	//if r.Body != nil {
+	//	body, err = ioutil.ReadAll(r.Body)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//}
 	sr := &serializableRequest{
 		URL:    r.URL.String(),
 		Method: r.Method,
-		Body:   body,
+		Body:   r.Body,
 		ID:     r.ID,
 		Ctx:    ctx,
 	}

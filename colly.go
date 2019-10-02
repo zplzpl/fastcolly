@@ -17,7 +17,6 @@ package colly
 
 import (
 	"bytes"
-	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -37,8 +36,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"google.golang.org/appengine/urlfetch"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/antchfx/htmlquery"
@@ -207,7 +204,7 @@ var envMap = map[string]func(*Collector, string){
 		c.DetectCharset = isYesString(val)
 	},
 	"DISABLE_COOKIES": func(c *Collector, _ string) {
-		c.backend.Client.Jar = nil
+		//c.backend.Client.Jar = nil
 	},
 	"DISALLOWED_DOMAINS": func(c *Collector, val string) {
 		c.DisallowedDomains = strings.Split(val, ",")
@@ -377,7 +374,7 @@ func (c *Collector) Init() {
 	c.backend = &httpBackend{}
 	jar, _ := cookiejar.New(nil)
 	c.backend.Init(jar)
-	c.backend.Client.CheckRedirect = c.checkRedirectFunc()
+	//c.backend.Client.CheckRedirect = c.checkRedirectFunc()
 	c.wg = &sync.WaitGroup{}
 	c.lock = &sync.RWMutex{}
 	c.robotsMap = make(map[string]*robotstxt.RobotsData)
@@ -396,14 +393,14 @@ func (c *Collector) Init() {
 //      ...
 //     c.Visit("https://google.ca")
 //   }
-func (c *Collector) Appengine(ctx context.Context) {
-	client := urlfetch.Client(ctx)
-	client.Jar = c.backend.Client.Jar
-	client.CheckRedirect = c.backend.Client.CheckRedirect
-	client.Timeout = c.backend.Client.Timeout
-
-	c.backend.Client = client
-}
+//func (c *Collector) Appengine(ctx context.Context) {
+//	client := urlfetch.Client(ctx)
+//	client.Jar = c.backend.Client.Jar
+//	client.CheckRedirect = c.backend.Client.CheckRedirect
+//	client.Timeout = c.backend.Client.Timeout
+//
+//	c.backend.Client = client
+//}
 
 // Visit starts Collector's collecting job by creating a
 // request to the URL specified in parameter.
@@ -424,25 +421,25 @@ func (c *Collector) Head(URL string) error {
 
 // Post starts a collector job by creating a POST request.
 // Post also calls the previously provided callbacks
-func (c *Collector) Post(URL string, requestData map[string]string) error {
-	return c.scrape(URL, "POST", 1, createFormReader(requestData), nil, nil, true)
-}
+//func (c *Collector) Post(URL string, requestData map[string]string) error {
+//	return c.scrape(URL, "POST", 1, createFormReader(requestData), nil, nil, true)
+//}
 
 // PostRaw starts a collector job by creating a POST request with raw binary data.
 // Post also calls the previously provided callbacks
-func (c *Collector) PostRaw(URL string, requestData []byte) error {
-	return c.scrape(URL, "POST", 1, bytes.NewReader(requestData), nil, nil, true)
-}
+//func (c *Collector) PostRaw(URL string, requestData []byte) error {
+//	return c.scrape(URL, "POST", 1, bytes.NewReader(requestData), nil, nil, true)
+//}
 
 // PostMultipart starts a collector job by creating a Multipart POST request
 // with raw binary data.  PostMultipart also calls the previously provided callbacks
-func (c *Collector) PostMultipart(URL string, requestData map[string][]byte) error {
-	boundary := randomBoundary()
-	hdr := http.Header{}
-	hdr.Set("Content-Type", "multipart/form-data; boundary="+boundary)
-	hdr.Set("User-Agent", c.UserAgent)
-	return c.scrape(URL, "POST", 1, createMultipartReader(boundary, requestData), nil, hdr, true)
-}
+//func (c *Collector) PostMultipart(URL string, requestData map[string][]byte) error {
+//	boundary := randomBoundary()
+//	hdr := http.Header{}
+//	hdr.Set("Content-Type", "multipart/form-data; boundary="+boundary)
+//	hdr.Set("User-Agent", c.UserAgent)
+//	return c.scrape(URL, "POST", 1, createMultipartReader(boundary, requestData), nil, hdr, true)
+//}
 
 // Request starts a collector job by creating a custom HTTP request
 // where method, context, headers and request data can be specified.
@@ -455,7 +452,7 @@ func (c *Collector) PostMultipart(URL string, requestData map[string][]byte) err
 //   - "DELETE"
 //   - "PATCH"
 //   - "OPTIONS"
-func (c *Collector) Request(method, URL string, requestData io.Reader, ctx *Context, hdr http.Header) error {
+func (c *Collector) Request(method, URL string, requestData []byte, ctx *Context, hdr http.Header) error {
 	return c.scrape(URL, method, 1, requestData, ctx, hdr, true)
 }
 
@@ -486,7 +483,7 @@ func (c *Collector) UnmarshalRequest(r []byte) (*Request, error) {
 	return &Request{
 		Method:    req.Method,
 		URL:       u,
-		Body:      bytes.NewReader(req.Body),
+		Body:      req.Body,
 		Ctx:       ctx,
 		ID:        atomic.AddUint32(&c.requestCount, 1),
 		Headers:   &req.Headers,
@@ -494,7 +491,7 @@ func (c *Collector) UnmarshalRequest(r []byte) (*Request, error) {
 	}, nil
 }
 
-func (c *Collector) scrape(u, method string, depth int, requestData io.Reader, ctx *Context, hdr http.Header, checkRevisit bool) error {
+func (c *Collector) scrape(u, method string, depth int, requestBody []byte, ctx *Context, hdr http.Header, checkRevisit bool) error {
 	if err := c.requestCheck(u, method, depth, checkRevisit); err != nil {
 		return err
 	}
@@ -513,34 +510,25 @@ func (c *Collector) scrape(u, method string, depth int, requestData io.Reader, c
 	if hdr == nil {
 		hdr = http.Header{"User-Agent": []string{c.UserAgent}}
 	}
-	rc, ok := requestData.(io.ReadCloser)
-	if !ok && requestData != nil {
-		rc = ioutil.NopCloser(requestData)
-	}
+	//rc, ok := requestData.(io.ReadCloser)
+	//if !ok && requestData != nil {
+	//	rc = ioutil.NopCloser(requestData)
+	//}
 	// The Go HTTP API ignores "Host" in the headers, preferring the client
 	// to use the Host field on Request.
-	host := parsedURL.Host
-	if hostHeader := hdr.Get("Host"); hostHeader != "" {
-		host = hostHeader
-	}
-	req := &http.Request{
-		Method:     method,
-		URL:        parsedURL,
-		Proto:      "HTTP/1.1",
-		ProtoMajor: 1,
-		ProtoMinor: 1,
-		Header:     hdr,
-		Body:       rc,
-		Host:       host,
-	}
-	setRequestBody(req, requestData)
-	u = parsedURL.String()
+	//host := parsedURL.Host
+	//if hostHeader := hdr.Get("Host"); hostHeader != "" {
+	//	host = hostHeader
+	//}
+
+	//u = parsedURL.String()
+
 	c.wg.Add(1)
-	if c.Async {
-		go c.fetch(u, method, depth, requestData, ctx, hdr, req)
-		return nil
-	}
-	return c.fetch(u, method, depth, requestData, ctx, hdr, req)
+	//if c.Async {
+	//	go c.fetch(u,parsedURL, method, depth, requestBody, ctx, hdr, req)
+	//	return nil
+	//}
+	return c.fetch(u,parsedURL, method, depth, requestBody, ctx, hdr)
 }
 
 func setRequestBody(req *http.Request, body io.Reader) {
@@ -575,18 +563,42 @@ func setRequestBody(req *http.Request, body io.Reader) {
 	}
 }
 
-func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ctx *Context, hdr http.Header, req *http.Request) error {
+func (c *Collector) fetch(u string,parsedURL *url.URL, method string, depth int, requestBody []byte, ctx *Context, hdr http.Header) error {
+
 	defer c.wg.Done()
+
+
 	if ctx == nil {
 		ctx = NewContext()
 	}
+
+	//host := parsedURL.Host
+	//if hostHeader := hdr.Get("Host"); hostHeader != "" {
+	//	host = hostHeader
+	//}
+
+	//req := fasthttp.AcquireRequest()
+	//defer func() {
+	//	fasthttp.ReleaseRequest(req)
+	//}()
+
+	//req.SetRequestURI(u)
+	//req.Header.SetMethod(method)
+	//for k,vs := range hdr {
+	//	for _,v := range vs {
+	//		req.Header.Add(k,v)
+	//	}
+	//}
+	//req.SetBody(requestBody)
+	//req.SetHost(host)
+
 	request := &Request{
-		URL:       req.URL,
-		Headers:   &req.Header,
+		URL:       parsedURL,
+		Headers:   &hdr,
 		Ctx:       ctx,
 		Depth:     depth,
 		Method:    method,
-		Body:      requestData,
+		Body:      requestBody,
 		collector: c,
 		ID:        atomic.AddUint32(&c.requestCount, 1),
 	}
@@ -597,26 +609,29 @@ func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ct
 		return nil
 	}
 
-	if method == "POST" && req.Header.Get("Content-Type") == "" {
-		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	if method == "POST" && request.Headers.Get("Content-Type") == "" {
+		request.Headers.Add("Content-Type", "application/x-www-form-urlencoded")
 	}
 
-	if req.Header.Get("Accept") == "" {
-		req.Header.Set("Accept", "*/*")
+	if request.Headers.Get("Accept") == "" {
+		request.Headers.Set("Accept", "*/*")
 	}
 
-	origURL := req.URL
-	response, err := c.backend.Cache(req, c.MaxBodySize, c.CacheDir)
-	if proxyURL, ok := req.Context().Value(ProxyURLKey).(string); ok {
-		request.ProxyURL = proxyURL
-	}
+	//origURL := request.URL
+	response, err := c.backend.Cache(request, c.MaxBodySize, c.CacheDir)
+	//if proxyURL, ok := req.Context().Value(ProxyURLKey).(string); ok {
+	//	request.ProxyURL = proxyURL
+	//}
+
 	if err := c.handleOnError(response, err, request, ctx); err != nil {
 		return err
 	}
-	if req.URL != origURL {
-		request.URL = req.URL
-		request.Headers = &req.Header
-	}
+
+	//if req.URL != origURL {
+	//	request.URL = req.URL
+	//	request.Headers = &req.Header
+	//}
+
 	atomic.AddUint32(&c.responseCount, 1)
 	response.Ctx = ctx
 	response.Request = request
@@ -699,14 +714,14 @@ func (c *Collector) checkRobots(u *url.URL) error {
 	c.lock.RUnlock()
 
 	if !ok {
+
 		// no robots file cached
-		resp, err := c.backend.Client.Get(u.Scheme + "://" + u.Host + "/robots.txt")
+		_,body, err := c.backend.Client.Get(nil,u.Scheme + "://" + u.Host + "/robots.txt")
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
 
-		robot, err = robotstxt.FromResponse(resp)
+		robot, err = robotstxt.FromBytes(body)
 		if err != nil {
 			return err
 		}
@@ -856,32 +871,33 @@ func (c *Collector) OnScraped(f ScrapedCallback) {
 
 // WithTransport allows you to set a custom http.RoundTripper (transport)
 func (c *Collector) WithTransport(transport http.RoundTripper) {
-	c.backend.Client.Transport = transport
+	//c.backend.Client.Transport = transport
 }
 
 // DisableCookies turns off cookie handling
 func (c *Collector) DisableCookies() {
-	c.backend.Client.Jar = nil
+	//c.backend.Client.Jar = nil
 }
 
 // SetCookieJar overrides the previously set cookie jar
 func (c *Collector) SetCookieJar(j http.CookieJar) {
-	c.backend.Client.Jar = j
+	//c.backend.Client.Jar = j
 }
 
 // SetRequestTimeout overrides the default timeout (10 seconds) for this collector
 func (c *Collector) SetRequestTimeout(timeout time.Duration) {
-	c.backend.Client.Timeout = timeout
+	c.backend.Client.ReadTimeout = timeout
+	c.backend.Client.WriteTimeout = timeout
 }
 
 // SetStorage overrides the default in-memory storage.
 // Storage stores scraping related data like cookies and visited urls
 func (c *Collector) SetStorage(s storage.Storage) error {
-	if err := s.Init(); err != nil {
-		return err
-	}
-	c.store = s
-	c.backend.Client.Jar = createJar(s)
+	//if err := s.Init(); err != nil {
+	//	return err
+	//}
+	//c.store = s
+	//c.backend.Client.Jar = createJar(s)
 	return nil
 }
 
@@ -909,14 +925,15 @@ func (c *Collector) SetProxy(proxyURL string) error {
 // and "socks5" are supported. If the scheme is empty,
 // "http" is assumed.
 func (c *Collector) SetProxyFunc(p ProxyFunc) {
-	t, ok := c.backend.Client.Transport.(*http.Transport)
-	if c.backend.Client.Transport != nil && ok {
-		t.Proxy = p
-	} else {
-		c.backend.Client.Transport = &http.Transport{
-			Proxy: p,
-		}
-	}
+
+	//t, ok := c.backend.Client.Transport.(*http.Transport)
+	//if c.backend.Client.Transport != nil && ok {
+	//	t.Proxy = p
+	//} else {
+	//	c.backend.Client.Transport = &http.Transport{
+	//		Proxy: p,
+	//	}
+	//}
 }
 
 func createEvent(eventType string, requestID, collectorID uint32, kvargs map[string]string) *debug.Event {
@@ -1093,27 +1110,28 @@ func (c *Collector) Limits(rules []*LimitRule) error {
 
 // SetCookies handles the receipt of the cookies in a reply for the given URL
 func (c *Collector) SetCookies(URL string, cookies []*http.Cookie) error {
-	if c.backend.Client.Jar == nil {
-		return ErrNoCookieJar
-	}
-	u, err := url.Parse(URL)
-	if err != nil {
-		return err
-	}
-	c.backend.Client.Jar.SetCookies(u, cookies)
+	//if c.backend.Client.Jar == nil {
+	//	return ErrNoCookieJar
+	//}
+	//u, err := url.Parse(URL)
+	//if err != nil {
+	//	return err
+	//}
+	//c.backend.Client.Jar.SetCookies(u, cookies)
 	return nil
 }
 
 // Cookies returns the cookies to send in a request for the given URL.
 func (c *Collector) Cookies(URL string) []*http.Cookie {
-	if c.backend.Client.Jar == nil {
-		return nil
-	}
-	u, err := url.Parse(URL)
-	if err != nil {
-		return nil
-	}
-	return c.backend.Client.Jar.Cookies(u)
+	//if c.backend.Client.Jar == nil {
+	//	return nil
+	//}
+	//u, err := url.Parse(URL)
+	//if err != nil {
+	//	return nil
+	//}
+	//return c.backend.Client.Jar.Cookies(u)
+	return nil
 }
 
 // Clone creates an exact copy of a Collector without callbacks.
