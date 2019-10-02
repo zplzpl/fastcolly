@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package colly implements a HTTP scraping framework
-package colly
+package fastcolly
 
 import (
 	"bytes"
