@@ -80,7 +80,7 @@ func (q *Queue) AddURL(URL string) error {
 	if err != nil {
 		return err
 	}
-	r := &colly.Request{
+	r := &fastcolly.Request{
 		URL:    u,
 		Method: "GET",
 	}
@@ -92,7 +92,7 @@ func (q *Queue) AddURL(URL string) error {
 }
 
 // AddRequest adds a new Request to the queue
-func (q *Queue) AddRequest(r *colly.Request) error {
+func (q *Queue) AddRequest(r *fastcolly.Request) error {
 	d, err := r.Marshal()
 	if err != nil {
 		return err
@@ -116,11 +116,11 @@ func (q *Queue) Size() (int, error) {
 
 // Run starts consumer threads and calls the Collector
 // to perform requests. Run blocks while the queue has active requests
-func (q *Queue) Run(c *colly.Collector) error {
+func (q *Queue) Run(c *fastcolly.Collector) error {
 	wg := &sync.WaitGroup{}
 	for i := 0; i < q.Threads; i++ {
 		wg.Add(1)
-		go func(c *colly.Collector, wg *sync.WaitGroup) {
+		go func(c *fastcolly.Collector, wg *sync.WaitGroup) {
 			defer wg.Done()
 			for {
 				if q.IsEmpty() {
