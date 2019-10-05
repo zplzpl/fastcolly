@@ -25,6 +25,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	mathRand "math/rand"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -42,6 +43,7 @@ import (
 	"github.com/antchfx/xmlquery"
 	"github.com/kennygrant/sanitize"
 	"github.com/temoto/robotstxt"
+	"github.com/valyala/fasthttp"
 
 	"github.com/zplzpl/fastcolly/debug"
 	"github.com/zplzpl/fastcolly/storage"
@@ -105,6 +107,9 @@ type Collector struct {
 	RedirectHandler func(req *http.Request, via []*http.Request) error
 	// CheckHead performs a HEAD request before every GET to pre-validate the response
 	CheckHead         bool
+
+	LimitRules []*LimitRule
+
 	store             storage.Storage
 	debugger          debug.Debugger
 	robotsMap         map[string]*robotstxt.RobotsData
@@ -524,10 +529,10 @@ func (c *Collector) scrape(u, method string, depth int, requestBody []byte, ctx 
 	//u = parsedURL.String()
 
 	c.wg.Add(1)
-	//if c.Async {
-	//	go c.fetch(u,parsedURL, method, depth, requestBody, ctx, hdr, req)
-	//	return nil
-	//}
+	if c.Async {
+		go c.fetch(u,parsedURL, method, depth, requestBody, ctx, hdr)
+		return nil
+	}
 	return c.fetch(u,parsedURL, method, depth, requestBody, ctx, hdr)
 }
 
@@ -565,32 +570,30 @@ func setRequestBody(req *http.Request, body io.Reader) {
 
 func (c *Collector) fetch(u string,parsedURL *url.URL, method string, depth int, requestBody []byte, ctx *Context, hdr http.Header) error {
 
-	defer c.wg.Done()
+	r := c.GetMatchingRule(parsedURL.Host)
 
+	if r != nil {
+		r.waitChan <- true
+		defer func(r *LimitRule) {
+			randomDelay := time.Duration(0)
+			if r.RandomDelay != 0 {
+				randomDelay = time.Duration(mathRand.Int63n(int64(r.RandomDelay)))
+			}
+			time.Sleep(r.Delay + randomDelay)
+			<-r.waitChan
+		}(r)
+	}
+
+	defer c.wg.Done()
 
 	if ctx == nil {
 		ctx = NewContext()
 	}
 
-	//host := parsedURL.Host
-	//if hostHeader := hdr.Get("Host"); hostHeader != "" {
-	//	host = hostHeader
-	//}
-
-	//req := fasthttp.AcquireRequest()
-	//defer func() {
-	//	fasthttp.ReleaseRequest(req)
-	//}()
-
-	//req.SetRequestURI(u)
-	//req.Header.SetMethod(method)
-	//for k,vs := range hdr {
-	//	for _,v := range vs {
-	//		req.Header.Add(k,v)
-	//	}
-	//}
-	//req.SetBody(requestBody)
-	//req.SetHost(host)
+	host := parsedURL.Host
+	if hostHeader := hdr.Get("Host"); hostHeader != "" {
+		host = hostHeader
+	}
 
 	request := &Request{
 		URL:       parsedURL,
@@ -617,8 +620,24 @@ func (c *Collector) fetch(u string,parsedURL *url.URL, method string, depth int,
 		request.Headers.Set("Accept", "*/*")
 	}
 
+	req,res := fasthttp.AcquireRequest(),fasthttp.AcquireResponse()
+	defer func() {
+		fasthttp.ReleaseRequest(req)
+		fasthttp.ReleaseResponse(res)
+	}()
+
+	req.SetRequestURI(u)
+	req.Header.SetMethod(method)
+	for k,vs := range hdr {
+		for _,v := range vs {
+			req.Header.Add(k,v)
+		}
+	}
+	req.SetBody(requestBody)
+	req.SetHost(host)
+
 	//origURL := request.URL
-	response, err := c.backend.Cache(request, c.MaxBodySize, c.CacheDir)
+	response, err := c.backend.Cache(req,res, c.MaxBodySize, c.CacheDir)
 	//if proxyURL, ok := req.Context().Value(ProxyURLKey).(string); ok {
 	//	request.ProxyURL = proxyURL
 	//}
@@ -1100,12 +1119,23 @@ func (c *Collector) handleOnScraped(r *Response) {
 
 // Limit adds a new LimitRule to the collector
 func (c *Collector) Limit(rule *LimitRule) error {
-	return c.backend.Limit(rule)
+	c.lock.Lock()
+	if c.LimitRules == nil {
+		c.LimitRules = make([]*LimitRule, 0, 8)
+	}
+	c.LimitRules = append(c.LimitRules, rule)
+	c.lock.Unlock()
+	return rule.Init()
 }
 
 // Limits adds new LimitRules to the collector
 func (c *Collector) Limits(rules []*LimitRule) error {
-	return c.backend.Limits(rules)
+	for _, r := range rules {
+		if err := c.Limit(r); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // SetCookies handles the receipt of the cookies in a reply for the given URL
@@ -1208,6 +1238,20 @@ func (c *Collector) parseSettingsFromEnv() {
 			log.Println("Unknown environment variable:", pair[0])
 		}
 	}
+}
+
+func (c *Collector) GetMatchingRule(domain string) *LimitRule {
+	if c.LimitRules == nil {
+		return nil
+	}
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	for _, r := range c.LimitRules {
+		if r.Match(domain) {
+			return r
+		}
+	}
+	return nil
 }
 
 // SanitizeFileName replaces dangerous characters in a string
