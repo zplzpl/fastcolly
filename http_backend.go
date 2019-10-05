@@ -31,7 +31,6 @@ import (
 )
 
 type httpBackend struct {
-	LimitRules []*LimitRule
 	Client     *fasthttp.Client
 	lock       *sync.RWMutex
 }
@@ -90,7 +89,9 @@ func (r *LimitRule) Init() error {
 
 func (h *httpBackend) Init(jar http.CookieJar) {
 	rand.Seed(time.Now().UnixNano())
-	h.Client = &fasthttp.Client{}
+	h.Client = &fasthttp.Client{
+
+	}
 
 	//h.Client = &http.Client{
 	//	Jar:     jar,
@@ -112,25 +113,25 @@ func (r *LimitRule) Match(domain string) bool {
 	return match
 }
 
-func (h *httpBackend) GetMatchingRule(domain string) *LimitRule {
-	if h.LimitRules == nil {
-		return nil
-	}
-	h.lock.RLock()
-	defer h.lock.RUnlock()
-	for _, r := range h.LimitRules {
-		if r.Match(domain) {
-			return r
-		}
-	}
-	return nil
-}
+//func (h *httpBackend) GetMatchingRule(domain string) *LimitRule {
+//	if h.LimitRules == nil {
+//		return nil
+//	}
+//	h.lock.RLock()
+//	defer h.lock.RUnlock()
+//	for _, r := range h.LimitRules {
+//		if r.Match(domain) {
+//			return r
+//		}
+//	}
+//	return nil
+//}
 
-func (h *httpBackend) Cache(request *Request, bodySize int, cacheDir string) (*Response, error) {
-	if cacheDir == "" || request.Method != "GET" {
-		return h.Do(request, bodySize)
+func (h *httpBackend) Cache(request *fasthttp.Request,res *fasthttp.Response, bodySize int, cacheDir string) (*Response, error) {
+	if cacheDir == "" || string(request.Header.Method()) != "GET" {
+		return h.Do(request,res)
 	}
-	sum := sha1.Sum([]byte(request.URL.String()))
+	sum := sha1.Sum(request.RequestURI())
 	hash := hex.EncodeToString(sum[:])
 	dir := path.Join(cacheDir, hash[:2])
 	filename := path.Join(dir, hash)
@@ -142,7 +143,7 @@ func (h *httpBackend) Cache(request *Request, bodySize int, cacheDir string) (*R
 			return resp, err
 		}
 	}
-	resp, err := h.Do(request, bodySize)
+	resp, err := h.Do(request,res)
 	if err != nil || resp.StatusCode >= 500 {
 		return resp, err
 	}
@@ -163,38 +164,7 @@ func (h *httpBackend) Cache(request *Request, bodySize int, cacheDir string) (*R
 	return resp, os.Rename(filename+"~", filename)
 }
 
-func (h *httpBackend) Do(request *Request, bodySize int) (*Response, error) {
-
-	r := h.GetMatchingRule(request.URL.Host)
-
-	if r != nil {
-		r.waitChan <- true
-		defer func(r *LimitRule) {
-			randomDelay := time.Duration(0)
-			if r.RandomDelay != 0 {
-				randomDelay = time.Duration(rand.Int63n(int64(r.RandomDelay)))
-			}
-			time.Sleep(r.Delay + randomDelay)
-			<-r.waitChan
-		}(r)
-	}
-
-	req,res := fasthttp.AcquireRequest(),fasthttp.AcquireResponse()
-	defer func() {
-		fasthttp.ReleaseRequest(req)
-		fasthttp.ReleaseResponse(res)
-	}()
-
-	req.SetRequestURI(request.URL.String())
-	req.Header.SetMethod(request.Method)
-	hdr := *request.Headers
-	for k,vs := range hdr {
-		for _,v := range vs {
-			req.Header.Add(k,v)
-		}
-	}
-	req.SetBody(request.Body)
-	req.SetHost(request.URL.Host)
+func (h *httpBackend) Do(req *fasthttp.Request,res *fasthttp.Response) (*Response, error) {
 
 	if err := h.Client.Do(req,res);err!=nil {
 		return nil,err
@@ -214,21 +184,21 @@ func (h *httpBackend) Do(request *Request, bodySize int) (*Response, error) {
 	}, nil
 }
 
-func (h *httpBackend) Limit(rule *LimitRule) error {
-	h.lock.Lock()
-	if h.LimitRules == nil {
-		h.LimitRules = make([]*LimitRule, 0, 8)
-	}
-	h.LimitRules = append(h.LimitRules, rule)
-	h.lock.Unlock()
-	return rule.Init()
-}
-
-func (h *httpBackend) Limits(rules []*LimitRule) error {
-	for _, r := range rules {
-		if err := h.Limit(r); err != nil {
-			return err
-		}
-	}
-	return nil
-}
+//func (h *httpBackend) Limit(rule *LimitRule) error {
+//	h.lock.Lock()
+//	if h.LimitRules == nil {
+//		h.LimitRules = make([]*LimitRule, 0, 8)
+//	}
+//	h.LimitRules = append(h.LimitRules, rule)
+//	h.lock.Unlock()
+//	return rule.Init()
+//}
+//
+//func (h *httpBackend) Limits(rules []*LimitRule) error {
+//	for _, r := range rules {
+//		if err := h.Limit(r); err != nil {
+//			return err
+//		}
+//	}
+//	return nil
+//}
