@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/zplzpl/fastcolly"
 )
@@ -116,16 +117,23 @@ func (q *Queue) Size() (int, error) {
 
 // Run starts consumer threads and calls the Collector
 // to perform requests. Run blocks while the queue has active requests
-func (q *Queue) Run(c *fastcolly.Collector) error {
+func (q *Queue) Run(c *fastcolly.Collector,doCall func(r *fastcolly.Request,err error),exit <-chan struct{},done chan<- struct{}) error {
 	wg := &sync.WaitGroup{}
 	for i := 0; i < q.Threads; i++ {
 		wg.Add(1)
-		go func(c *fastcolly.Collector, wg *sync.WaitGroup) {
+		go func(c *fastcolly.Collector, wg *sync.WaitGroup,doCall func(r *fastcolly.Request,err error),exit <-chan struct{}) {
 			defer wg.Done()
+		WorkLoop:
 			for {
 				if q.IsEmpty() {
 					if q.activeThreadCount == 0 {
-						break
+						select {
+						case <-exit:
+							break WorkLoop
+						default:
+							time.Sleep(time.Second * 5)
+							continue WorkLoop
+						}
 					}
 					ch := make(chan bool)
 					q.lock.Lock()
@@ -133,7 +141,7 @@ func (q *Queue) Run(c *fastcolly.Collector) error {
 					q.lock.Unlock()
 					action := <-ch
 					if action == stop && q.IsEmpty() {
-						break
+						continue
 					}
 				}
 				q.lock.Lock()
@@ -149,11 +157,12 @@ func (q *Queue) Run(c *fastcolly.Collector) error {
 					q.finish()
 					continue
 				}
-				r.Do()
+				doCall(r,r.Do())
 				q.finish()
 			}
-		}(c, wg)
+		}(c, wg,doCall,exit)
 	}
+	close(done)
 	wg.Wait()
 	return nil
 }
