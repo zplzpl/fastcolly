@@ -15,5 +15,5 @@ require (
 	github.com/temoto/robotstxt v1.1.1
 	github.com/valyala/fasthttp v1.5.0
 	golang.org/x/net v0.0.0-20190827160401-ba9fcec4b297
-	google.golang.org/appengine v1.6.1
+	google.golang.org/appengine v1.6.1 // indirect
 )
