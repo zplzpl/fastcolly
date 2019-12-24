@@ -18,6 +18,7 @@ package fastcolly
 import (
 	"bytes"
 	"crypto/rand"
+	mathRand "math/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,7 +26,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	mathRand "math/rand"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -47,6 +47,7 @@ import (
 
 	"github.com/zplzpl/fastcolly/debug"
 	"github.com/zplzpl/fastcolly/storage"
+	
 )
 
 // A CollectorOption sets an option on a Collector.
@@ -528,6 +529,20 @@ func (c *Collector) scrape(u, method string, depth int, requestBody []byte, ctx 
 
 	//u = parsedURL.String()
 
+	r := c.GetMatchingRule(parsedURL.Host)
+
+	if r != nil {
+		r.waitChan <- true
+		defer func(r *LimitRule) {
+			randomDelay := time.Duration(0)
+			if r.RandomDelay != 0 {
+				randomDelay = time.Duration(mathRand.Int63n(int64(r.RandomDelay)))
+			}
+			time.Sleep(r.Delay + randomDelay)
+			<-r.waitChan
+		}(r)
+	}
+
 	c.wg.Add(1)
 	if c.Async {
 		go c.fetch(u,parsedURL, method, depth, requestBody, ctx, hdr)
@@ -569,20 +584,6 @@ func setRequestBody(req *http.Request, body io.Reader) {
 }
 
 func (c *Collector) fetch(u string,parsedURL *url.URL, method string, depth int, requestBody []byte, ctx *Context, hdr http.Header) error {
-
-	r := c.GetMatchingRule(parsedURL.Host)
-
-	if r != nil {
-		r.waitChan <- true
-		defer func(r *LimitRule) {
-			randomDelay := time.Duration(0)
-			if r.RandomDelay != 0 {
-				randomDelay = time.Duration(mathRand.Int63n(int64(r.RandomDelay)))
-			}
-			time.Sleep(r.Delay + randomDelay)
-			<-r.waitChan
-		}(r)
-	}
 
 	defer c.wg.Done()
 
