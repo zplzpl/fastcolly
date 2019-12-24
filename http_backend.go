@@ -172,9 +172,7 @@ func (h *httpBackend) Do(req *fasthttp.Request,res *fasthttp.Response) (*Respons
 
 	rhdr := make(http.Header)
 	res.Header.VisitAll(func(k, v []byte) {
-		sk := string(k)
-		sv := string(v)
-		rhdr.Set(sk, sv)
+		rhdr.Set(B2S(k), B2S(v))
 	})
 
 	return &Response{
