@@ -18,7 +18,6 @@ package fastcolly
 import (
 	"bytes"
 	"crypto/rand"
-	mathRand "math/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,6 +25,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	mathRand "math/rand"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -47,7 +47,6 @@ import (
 
 	"github.com/zplzpl/fastcolly/debug"
 	"github.com/zplzpl/fastcolly/storage"
-	
 )
 
 // A CollectorOption sets an option on a Collector.
@@ -107,7 +106,7 @@ type Collector struct {
 	// RedirectHandler allows control on how a redirect will be managed
 	RedirectHandler func(req *http.Request, via []*http.Request) error
 	// CheckHead performs a HEAD request before every GET to pre-validate the response
-	CheckHead         bool
+	CheckHead bool
 
 	LimitRules []*LimitRule
 
@@ -533,22 +532,14 @@ func (c *Collector) scrape(u, method string, depth int, requestBody []byte, ctx 
 
 	if r != nil {
 		r.waitChan <- true
-		defer func(r *LimitRule) {
-			randomDelay := time.Duration(0)
-			if r.RandomDelay != 0 {
-				randomDelay = time.Duration(mathRand.Int63n(int64(r.RandomDelay)))
-			}
-			time.Sleep(r.Delay + randomDelay)
-			<-r.waitChan
-		}(r)
 	}
 
 	c.wg.Add(1)
 	if c.Async {
-		go c.fetch(u,parsedURL, method, depth, requestBody, ctx, hdr)
+		go c.fetch(u, parsedURL, method, depth, requestBody, ctx, hdr, r)
 		return nil
 	}
-	return c.fetch(u,parsedURL, method, depth, requestBody, ctx, hdr)
+	return c.fetch(u, parsedURL, method, depth, requestBody, ctx, hdr, r)
 }
 
 func setRequestBody(req *http.Request, body io.Reader) {
@@ -583,9 +574,21 @@ func setRequestBody(req *http.Request, body io.Reader) {
 	}
 }
 
-func (c *Collector) fetch(u string,parsedURL *url.URL, method string, depth int, requestBody []byte, ctx *Context, hdr http.Header) error {
+func (c *Collector) fetch(u string, parsedURL *url.URL, method string, depth int, requestBody []byte, ctx *Context, hdr http.Header, limitRule *LimitRule) error {
 
-	defer c.wg.Done()
+	var release bool
+
+	defer func() {
+		c.wg.Done()
+		if limitRule != nil && (!release) {
+			randomDelay := time.Duration(0)
+			if limitRule.RandomDelay != 0 {
+				randomDelay = time.Duration(mathRand.Int63n(int64(limitRule.RandomDelay)))
+			}
+			time.Sleep(limitRule.Delay + randomDelay)
+			<-limitRule.waitChan
+		}
+	}()
 
 	if ctx == nil {
 		ctx = NewContext()
@@ -621,7 +624,7 @@ func (c *Collector) fetch(u string,parsedURL *url.URL, method string, depth int,
 		request.Headers.Set("Accept", "*/*")
 	}
 
-	req,res := fasthttp.AcquireRequest(),fasthttp.AcquireResponse()
+	req, res := fasthttp.AcquireRequest(), fasthttp.AcquireResponse()
 	defer func() {
 		fasthttp.ReleaseRequest(req)
 		fasthttp.ReleaseResponse(res)
@@ -629,19 +632,29 @@ func (c *Collector) fetch(u string,parsedURL *url.URL, method string, depth int,
 
 	req.SetRequestURI(u)
 	req.Header.SetMethod(method)
-	for k,vs := range hdr {
-		for _,v := range vs {
-			req.Header.Add(k,v)
+	for k, vs := range hdr {
+		for _, v := range vs {
+			req.Header.Add(k, v)
 		}
 	}
 	req.SetBody(requestBody)
 	req.SetHost(host)
 
 	//origURL := request.URL
-	response, err := c.backend.Cache(req,res, c.MaxBodySize, c.CacheDir)
+	response, err := c.backend.Cache(req, res, c.MaxBodySize, c.CacheDir)
 	//if proxyURL, ok := req.Context().Value(ProxyURLKey).(string); ok {
 	//	request.ProxyURL = proxyURL
 	//}
+	if limitRule != nil {
+		randomDelay := time.Duration(0)
+		if limitRule.RandomDelay != 0 {
+			randomDelay = time.Duration(mathRand.Int63n(int64(limitRule.RandomDelay)))
+		}
+		time.Sleep(limitRule.Delay + randomDelay)
+		<-limitRule.waitChan
+	}
+
+	release = true
 
 	if err := c.handleOnError(response, err, request, ctx); err != nil {
 		return err
@@ -736,7 +749,7 @@ func (c *Collector) checkRobots(u *url.URL) error {
 	if !ok {
 
 		// no robots file cached
-		_,body, err := c.backend.Client.Get(nil,u.Scheme + "://" + u.Host + "/robots.txt")
+		_, body, err := c.backend.Client.Get(nil, u.Scheme+"://"+u.Host+"/robots.txt")
 		if err != nil {
 			return err
 		}
