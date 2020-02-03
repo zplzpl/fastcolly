@@ -542,7 +542,7 @@ func (c *Collector) scrape(u, method string, depth int, requestBody []byte, ctx 
 					log.Println(fmt.Sprintf("recover from panic, msg: %v", msg))
 				}
 			}()
-			_ := c.fetch(u, parsedURL, method, depth, requestBody, ctx, hdr, r)
+			_ = c.fetch(u, parsedURL, method, depth, requestBody, ctx, hdr, r)
 		}(u, parsedURL, method, depth, requestBody, ctx, hdr, r)
 		return nil
 	}
