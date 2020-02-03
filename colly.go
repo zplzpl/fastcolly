@@ -536,9 +536,17 @@ func (c *Collector) scrape(u, method string, depth int, requestBody []byte, ctx 
 
 	c.wg.Add(1)
 	if c.Async {
-		go c.fetch(u, parsedURL, method, depth, requestBody, ctx, hdr, r)
+		go func(u string, parsedURL *url.URL, method string, depth int, requestBody []byte, ctx *Context, hdr http.Header, limitRule *LimitRule) {
+			defer func() {
+				if msg := recover(); msg != nil {
+					log.Println(fmt.Sprintf("recover from panic, msg: %v", msg))
+				}
+			}()
+			_ := c.fetch(u, parsedURL, method, depth, requestBody, ctx, hdr, r)
+		}(u, parsedURL, method, depth, requestBody, ctx, hdr, r)
 		return nil
 	}
+
 	return c.fetch(u, parsedURL, method, depth, requestBody, ctx, hdr, r)
 }
 
