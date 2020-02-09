@@ -654,22 +654,19 @@ func (c *Collector) fetch(u string, parsedURL *url.URL, method string, depth int
 	//	request.ProxyURL = proxyURL
 	//}
 
-	if !(err == nil && (c.ParseHTTPErrorResponse || response.StatusCode < 203)) {
-
-		if limitRule != nil {
-			randomDelay := time.Duration(0)
-			if limitRule.RandomDelay != 0 {
-				randomDelay = time.Duration(mathRand.Int63n(int64(limitRule.RandomDelay)))
-			}
-			time.Sleep(limitRule.Delay + randomDelay)
-			<-limitRule.waitChan
+	if limitRule != nil {
+		randomDelay := time.Duration(0)
+		if limitRule.RandomDelay != 0 {
+			randomDelay = time.Duration(mathRand.Int63n(int64(limitRule.RandomDelay)))
 		}
+		time.Sleep(limitRule.Delay + randomDelay)
+		<-limitRule.waitChan
+	}
 
-		release = true
+	release = true
 
-		if err := c.handleOnError(response, err, request, ctx); err != nil {
-			return err
-		}
+	if err := c.handleOnError(response, err, request, ctx); err != nil {
+		return err
 	}
 
 	//if req.URL != origURL {
