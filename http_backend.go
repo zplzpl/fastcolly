@@ -31,8 +31,8 @@ import (
 )
 
 type httpBackend struct {
-	Client     *fasthttp.Client
-	lock       *sync.RWMutex
+	Client *fasthttp.Client
+	lock   *sync.RWMutex
 }
 
 // LimitRule provides connection restrictions for domains.
@@ -89,9 +89,7 @@ func (r *LimitRule) Init() error {
 
 func (h *httpBackend) Init(jar http.CookieJar) {
 	rand.Seed(time.Now().UnixNano())
-	h.Client = &fasthttp.Client{
-
-	}
+	h.Client = &fasthttp.Client{}
 
 	//h.Client = &http.Client{
 	//	Jar:     jar,
@@ -127,9 +125,9 @@ func (r *LimitRule) Match(domain string) bool {
 //	return nil
 //}
 
-func (h *httpBackend) Cache(request *fasthttp.Request,res *fasthttp.Response, bodySize int, cacheDir string) (*Response, error) {
+func (h *httpBackend) Cache(request *fasthttp.Request, res *fasthttp.Response, bodySize int, cacheDir string) (*Response, error) {
 	if cacheDir == "" || string(request.Header.Method()) != "GET" {
-		return h.Do(request,res)
+		return h.Do(request, res)
 	}
 	sum := sha1.Sum(request.RequestURI())
 	hash := hex.EncodeToString(sum[:])
@@ -143,7 +141,7 @@ func (h *httpBackend) Cache(request *fasthttp.Request,res *fasthttp.Response, bo
 			return resp, err
 		}
 	}
-	resp, err := h.Do(request,res)
+	resp, err := h.Do(request, res)
 	if err != nil || resp.StatusCode >= 500 {
 		return resp, err
 	}
@@ -164,22 +162,38 @@ func (h *httpBackend) Cache(request *fasthttp.Request,res *fasthttp.Response, bo
 	return resp, os.Rename(filename+"~", filename)
 }
 
-func (h *httpBackend) Do(req *fasthttp.Request,res *fasthttp.Response) (*Response, error) {
+func (h *httpBackend) Do(req *fasthttp.Request, res *fasthttp.Response) (*Response, error) {
 
-	if err := h.Client.Do(req,res);err!=nil {
-		return nil,err
+	if err := h.Client.Do(req, res); err != nil {
+		return nil, err
 	}
 
 	rhdr := make(http.Header)
+	var gzip bool
 	res.Header.VisitAll(func(k, v []byte) {
-		rhdr.Set(B2S(k), B2S(v))
+
+		key := B2S(k)
+		val := B2S(v)
+		if key == "Content-Encoding" && val == "gzip" {
+			gzip = true
+		}
+
+		rhdr.Set(key, val)
 	})
 
-	return &Response{
+	r := &Response{
 		StatusCode: res.StatusCode(),
-		Body:       res.Body(),
+		Body:       nil,
 		Headers:    &rhdr,
-	}, nil
+	}
+
+	if gzip {
+		r.Body, _ = res.BodyGunzip()
+	} else {
+		r.Body = res.Body()
+	}
+
+	return r, nil
 }
 
 //func (h *httpBackend) Limit(rule *LimitRule) error {
