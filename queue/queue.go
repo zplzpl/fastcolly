@@ -117,11 +117,11 @@ func (q *Queue) Size() (int, error) {
 
 // Run starts consumer threads and calls the Collector
 // to perform requests. Run blocks while the queue has active requests
-func (q *Queue) Run(c *fastcolly.Collector,doCall func(r *fastcolly.Request,err error),exit <-chan struct{},done chan<- struct{}) error {
+func (q *Queue) Run(c *fastcolly.Collector, doCall func(r *fastcolly.Request, err error), exit <-chan struct{}, done chan<- struct{}) error {
 	wg := &sync.WaitGroup{}
 	for i := 0; i < q.Threads; i++ {
 		wg.Add(1)
-		go func(c *fastcolly.Collector, wg *sync.WaitGroup,doCall func(r *fastcolly.Request,err error),exit <-chan struct{}) {
+		go func(c *fastcolly.Collector, wg *sync.WaitGroup, doCall func(r *fastcolly.Request, err error), exit <-chan struct{}) {
 			defer wg.Done()
 		WorkLoop:
 			for {
@@ -157,10 +157,10 @@ func (q *Queue) Run(c *fastcolly.Collector,doCall func(r *fastcolly.Request,err 
 					q.finish()
 					continue
 				}
-				doCall(r,r.Do())
+				doCall(r, r.Do())
 				q.finish()
 			}
-		}(c, wg,doCall,exit)
+		}(c, wg, doCall, exit)
 	}
 	close(done)
 	wg.Wait()

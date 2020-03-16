@@ -15,11 +15,12 @@
 package fastcolly
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync/atomic"
+
+	"github.com/zplzpl/fastcolly/json"
 )
 
 // Request is the representation of a HTTP request made by a Collector
