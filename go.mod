@@ -5,8 +5,7 @@ go 1.12
 require (
 	github.com/PuerkitoBio/goquery v1.5.0
 	github.com/antchfx/htmlquery v1.0.0
-	github.com/antchfx/xmlquery v1.0.0
-	github.com/antchfx/xpath v1.0.0 // indirect
+	github.com/antchfx/xmlquery v1.3.1
 	github.com/gobwas/glob v0.2.3
 	github.com/jawher/mow.cli v1.1.0
 	github.com/json-iterator/go v1.1.9
